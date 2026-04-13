@@ -1,6 +1,6 @@
 /*
  *  This file is part of BoxBox (https://github.com/BrightDV/BoxBox).
- * 
+ *
  * BoxBox is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -13,7 +13,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public License
  * along with BoxBox.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Copyright (c) 2022-2025, BrightDV
  */
 
@@ -46,20 +46,57 @@ import 'package:boxbox/Screens/team_details.dart';
 import 'package:boxbox/Screens/video.dart';
 import 'package:boxbox/Screens/videos.dart';
 import 'package:boxbox/helpers/bottom_navigation_bar.dart';
+import 'package:boxbox/helpers/platform_adaptive.dart';
 import 'package:boxbox/helpers/route_handler.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:boxbox/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: build a page with an adaptive (Cupertino / Material) app-bar shell.
+// ─────────────────────────────────────────────────────────────────────────────
+Widget _adaptivePage({
+  required BuildContext context,
+  required String title,
+  required Widget body,
+  List<Widget>? actions,
+  bool centerTitle = true,
+}) {
+  if (isIOS) {
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          title,
+          style: const TextStyle(
+            fontFamily: 'Formula1',
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        trailing: actions != null && actions.isNotEmpty
+            ? Row(mainAxisSize: MainAxisSize.min, children: actions)
+            : null,
+      ),
+      child: SafeArea(bottom: false, child: body),
+    );
+  }
+  return Scaffold(
+    appBar: AppBar(
+      title: Text(title),
+      actions: actions,
+      centerTitle: centerTitle,
+      backgroundColor: Theme.of(context).colorScheme.onPrimary,
+    ),
+    body: body,
+  );
+}
+
 class RouterLocalConfig {
   static final router = GoRouter(
     redirect: (context, state) {
       String url = state.uri.toString();
-      if (url.startsWith('/')) {
-        url = url.replaceFirst('/', '');
-      }
-      // handle urls (web only)
+      if (url.startsWith('/')) url = url.replaceFirst('/', '');
       if (url.startsWith('https://www.formula1.com') ||
           url.startsWith('https://formula1.com')) {
         url = url
@@ -78,44 +115,37 @@ class RouterLocalConfig {
     },
     errorBuilder: (context, state) {
       String url = state.uri.toString();
-      if (url.startsWith('/')) {
-        url = url.replaceFirst('/', '');
-      }
+      if (url.startsWith('/')) url = url.replaceFirst('/', '');
       if (url.startsWith('https://www.formula1.com') ||
           url.startsWith('https://formula1.com')) {
         return SharedLinkHandler(url);
-      } else {
-        return ErrorNotFoundScreen(
-          route: state.uri.toString(),
-        );
       }
+      return ErrorNotFoundScreen(route: state.uri.toString());
     },
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) {
-          return const MainBottomNavigationBar();
-        },
+        builder: (context, state) => const MainBottomNavigationBar(),
         routes: [
-          // General routes
+          // ── Article ────────────────────────────────────────────────────
           GoRoute(
             name: 'article',
             path: 'article/:id',
             builder: (context, state) {
               Map? extras;
-              if (state.extra != null) {
-                extras = state.extra as Map;
-              }
+              if (state.extra != null) extras = state.extra as Map;
               return ArticleScreen(
                 state.pathParameters['id']!,
                 extras?['articleName'] ?? '',
                 extras == null ? true : extras['isFromLink'] ?? true,
-                update: extras?['update'] ?? null,
-                news: extras?['news'] ?? null,
+                update: extras?['update'],
+                news: extras?['news'],
                 championshipOfArticle: extras?['championshipOfArticle'] ?? '',
               );
             },
           ),
+
+          // ── Video ──────────────────────────────────────────────────────
           GoRoute(
             name: 'video',
             path: 'video/:id',
@@ -125,16 +155,15 @@ class RouterLocalConfig {
                 extras = state.extra as Map;
                 return VideoScreen(
                   extras['video'],
-                  update: extras['update'] ?? null,
-                  videoChampionship: extras['videoChampionship'] ?? null,
+                  update: extras['update'],
+                  videoChampionship: extras['videoChampionship'],
                 );
-              } else {
-                return VideoScreenFromId(state.pathParameters['id']!);
               }
+              return VideoScreenFromId(state.pathParameters['id']!);
             },
           ),
 
-          // Drawer routes
+          // ── Drawer / More routes ───────────────────────────────────────
           GoRoute(
             name: 'formula-you',
             path: 'formula-you',
@@ -160,6 +189,8 @@ class RouterLocalConfig {
             path: 'downloads',
             builder: (context, state) => const DownloadsScreen(),
           ),
+
+          // ── Settings ───────────────────────────────────────────────────
           GoRoute(
             name: 'settings',
             path: 'settings',
@@ -171,7 +202,8 @@ class RouterLocalConfig {
               GoRoute(
                 name: 'appearance-settings',
                 path: 'appearance',
-                builder: (context, state) => const AppearanceSettingsScreen(),
+                builder: (context, state) =>
+                    const AppearanceSettingsScreen(),
               ),
               GoRoute(
                 name: 'player-settings',
@@ -197,9 +229,7 @@ class RouterLocalConfig {
                 path: 'custom-home-feed',
                 builder: (context, state) {
                   Map? extras = state.extra as Map?;
-                  return CustomeHomeFeedSettingsScreen(
-                    extras?['update'],
-                  );
+                  return CustomeHomeFeedSettingsScreen(extras?['update']);
                 },
               ),
               GoRoute(
@@ -215,9 +245,7 @@ class RouterLocalConfig {
                 path: 'formula-you',
                 builder: (context, state) {
                   Map? extras = state.extra as Map?;
-                  return FormulaYouSettingsScreen(
-                    update: extras?['update'],
-                  );
+                  return FormulaYouSettingsScreen(update: extras?['update']);
                 },
               ),
               GoRoute(
@@ -225,17 +253,13 @@ class RouterLocalConfig {
                 path: 'mixed-news',
                 builder: (context, state) {
                   Map? extras = state.extra as Map?;
-                  return EditOrderScreen(
-                    extras?['update'],
-                  );
+                  return EditOrderScreen(extras?['update']);
                 },
               ),
               GoRoute(
                 name: 'championship-settings',
                 path: 'championship',
-                builder: (context, state) {
-                  return ChampionshipScreen();
-                },
+                builder: (context, state) => ChampionshipScreen(),
               ),
             ],
           ),
@@ -245,7 +269,7 @@ class RouterLocalConfig {
             builder: (context, state) => const AboutScreen(),
           ),
 
-          // drivers and teams
+          // ── Drivers & Teams ────────────────────────────────────────────
           GoRoute(
             name: 'drivers',
             path: 'drivers/:driverId',
@@ -259,11 +283,9 @@ class RouterLocalConfig {
                   extras['familyName'],
                   detailsPath: extras['detailsPath'],
                 );
-              } else {
-                return DriverDetailsFromIdScreen(
-                  state.pathParameters['driverId']!,
-                );
               }
+              return DriverDetailsFromIdScreen(
+                  state.pathParameters['driverId']!);
             },
           ),
           GoRoute(
@@ -278,21 +300,16 @@ class RouterLocalConfig {
                   extras['teamFullName'],
                   detailsPath: extras['detailsPath'],
                 );
-              } else {
-                return TeamDetailsFromIdScreen(
-                  state.pathParameters['teamId']!,
-                );
               }
+              return TeamDetailsFromIdScreen(state.pathParameters['teamId']!);
             },
           ),
 
-          // circuits & results
+          // ── Circuits & Results ─────────────────────────────────────────
           GoRoute(
             name: 'racing',
             path: 'racing/:meetingId',
             builder: (context, state) {
-              // will be updated with Rewrite Part 2 (championship-specific routes)
-              // it ensures compatibility in the meantime
               String championship = Hive.box('settings')
                   .get('championship', defaultValue: 'Formula 1') as String;
               if (championship == 'Formula 1') {
@@ -300,35 +317,22 @@ class RouterLocalConfig {
                   int.parse(state.pathParameters['meetingId']!);
                 } catch (_) {
                   return CircuitScreenFromMeetingName(
-                    state.pathParameters['meetingId']!,
-                  );
+                      state.pathParameters['meetingId']!);
                 }
-                return CircuitScreen(
-                  state.pathParameters['meetingId']!,
-                );
-              } else {
-                return CircuitScreen(
-                  state.pathParameters['meetingId']!,
-                );
+                return CircuitScreen(state.pathParameters['meetingId']!);
               }
+              return CircuitScreen(state.pathParameters['meetingId']!);
             },
             routes: [
               GoRoute(
                 name: 'starting-grid',
                 path: 'starting-grid',
-                builder: (context, state) {
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: Text(
-                        AppLocalizations.of(context)!.startingGrid,
-                      ),
-                      backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                    body: StartingGridProvider(
-                      state.pathParameters['meetingId']!,
-                    ),
-                  );
-                },
+                builder: (context, state) => _adaptivePage(
+                  context: context,
+                  title: AppLocalizations.of(context)!.startingGrid,
+                  body: StartingGridProvider(
+                      state.pathParameters['meetingId']!),
+                ),
               ),
               GoRoute(
                 name: 'practice',
@@ -347,70 +351,51 @@ class RouterLocalConfig {
                       raceUrl: extras['raceUrl'],
                       sessionId: extras['sessionId'],
                     );
-                  } else {
-                    return FreePracticeFromMeetingKeyScreen(
-                      state.pathParameters['meetingId']!,
-                      int.parse(state.pathParameters['sessionIndex']!),
-                    );
                   }
+                  return FreePracticeFromMeetingKeyScreen(
+                    state.pathParameters['meetingId']!,
+                    int.parse(state.pathParameters['sessionIndex']!),
+                  );
                 },
               ),
               GoRoute(
                 name: 'sprint-shootout',
                 path: 'sprint-shootout',
-                builder: (context, state) {
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: Text(
-                        AppLocalizations.of(context)!.sprintQualifyings,
-                      ),
-                      backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                    body: QualificationResultsProvider(
-                      raceUrl: '',
-                      sessionId: state.pathParameters['meetingId']!,
-                      meetingId: state.pathParameters['meetingId']!,
-                      hasSprint: true,
-                      isSprintQualifying: true,
-                    ),
-                  );
-                },
+                builder: (context, state) => _adaptivePage(
+                  context: context,
+                  title: AppLocalizations.of(context)!.sprintQualifyings,
+                  body: QualificationResultsProvider(
+                    raceUrl: '',
+                    sessionId: state.pathParameters['meetingId']!,
+                    meetingId: state.pathParameters['meetingId']!,
+                    hasSprint: true,
+                    isSprintQualifying: true,
+                  ),
+                ),
               ),
               GoRoute(
                 name: 'sprint',
                 path: 'sprint',
-                builder: (context, state) {
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: Text(
-                        AppLocalizations.of(context)!.sprint,
-                      ),
-                      backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    ),
-                    body: RaceResultsProvider(
-                      raceUrl: 'sprint',
-                      raceId: state.pathParameters['meetingId']!,
-                    ),
-                  );
-                },
+                builder: (context, state) => _adaptivePage(
+                  context: context,
+                  title: AppLocalizations.of(context)!.sprint,
+                  body: RaceResultsProvider(
+                    raceUrl: 'sprint',
+                    raceId: state.pathParameters['meetingId']!,
+                  ),
+                ),
               ),
               GoRoute(
                 name: 'qualifyings',
                 path: 'qualifyings',
                 builder: (context, state) {
                   String? sessionId;
-                  Map? extras;
                   if (state.extra != null) {
-                    extras = state.extra as Map;
-                    sessionId = extras['sessionId'];
+                    sessionId = (state.extra as Map)['sessionId'] as String?;
                   }
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: Text(
-                        AppLocalizations.of(context)!.qualifyings,
-                      ),
-                      backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    ),
+                  return _adaptivePage(
+                    context: context,
+                    title: AppLocalizations.of(context)!.qualifyings,
                     body: QualificationResultsProvider(
                       raceUrl: '',
                       meetingId: state.pathParameters['meetingId']!,
@@ -424,96 +409,54 @@ class RouterLocalConfig {
                 name: 'race',
                 path: 'race',
                 builder: (context, state) {
-                  Map? extras;
+                  String? sessionId;
                   if (state.extra != null) {
-                    extras = state.extra as Map;
-                    return Scaffold(
-                      appBar: AppBar(
-                        title: Text(
-                          AppLocalizations.of(context)!.race,
-                        ),
-                        backgroundColor:
-                            Theme.of(context).colorScheme.onPrimary,
-                      ),
-                      body: RaceResultsProvider(
-                        raceUrl: 'race',
-                        sessionId: extras['sessionId'],
-                        raceId: state.pathParameters['meetingId']!,
-                      ),
-                    );
-                  } else {
-                    return Scaffold(
-                      appBar: AppBar(
-                        title: Text(
-                          AppLocalizations.of(context)!.race,
-                        ),
-                        backgroundColor:
-                            Theme.of(context).colorScheme.onPrimary,
-                      ),
-                      body: RaceResultsProvider(
-                        raceUrl: 'race',
-                        raceId: state.pathParameters['meetingId']!,
-                      ),
-                    );
+                    sessionId = (state.extra as Map)['sessionId'] as String?;
                   }
+                  return _adaptivePage(
+                    context: context,
+                    title: AppLocalizations.of(context)!.race,
+                    body: RaceResultsProvider(
+                      raceUrl: 'race',
+                      raceId: state.pathParameters['meetingId']!,
+                      sessionId: sessionId,
+                    ),
+                  );
                 },
               ),
             ],
           ),
 
-          // standings
+          // ── Standings ──────────────────────────────────────────────────
           GoRoute(
             name: 'standings',
             path: 'standings',
             builder: (context, state) {
               Map? extras;
-              if (state.extra != null) {
-                extras = state.extra as Map;
-                return Scaffold(
-                  appBar: AppBar(
-                    centerTitle: true,
-                    title: Text(
-                      AppLocalizations.of(context)!.standings,
-                    ),
-                    backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                  ),
-                  body: StandingsScreen(
-                    switchToTeamStandings: extras['switchToTeamStandings'],
-                  ),
-                );
-              } else {
-                return Scaffold(
-                  appBar: AppBar(
-                    centerTitle: true,
-                    title: Text(
-                      AppLocalizations.of(context)!.standings,
-                    ),
-                    backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                  ),
-                  body: const StandingsScreen(),
-                );
-              }
-            },
-          ),
-
-          // schedule
-          GoRoute(
-            name: 'schedule',
-            path: 'schedule',
-            builder: (context, state) {
-              return Scaffold(
-                appBar: AppBar(
-                  title: Text(
-                    AppLocalizations.of(context)!.schedule,
-                  ),
-                  backgroundColor: Theme.of(context).colorScheme.onPrimary,
+              if (state.extra != null) extras = state.extra as Map;
+              return _adaptivePage(
+                context: context,
+                title: AppLocalizations.of(context)!.standings,
+                centerTitle: true,
+                body: StandingsScreen(
+                  switchToTeamStandings: extras?['switchToTeamStandings'],
                 ),
-                body: const ScheduleScreen(),
               );
             },
           ),
 
-          // racehub
+          // ── Schedule ───────────────────────────────────────────────────
+          GoRoute(
+            name: 'schedule',
+            path: 'schedule',
+            builder: (context, state) => _adaptivePage(
+              context: context,
+              title: AppLocalizations.of(context)!.schedule,
+              body: const ScheduleScreen(),
+            ),
+          ),
+
+          // ── Race Hub ───────────────────────────────────────────────────
           GoRoute(
             name: 'race-hub',
             path: 'race-hub',
@@ -521,30 +464,21 @@ class RouterLocalConfig {
               Map? extras;
               if (state.extra != null) {
                 extras = state.extra as Map;
-                return RaceHubScreen(
-                  extras['event'],
-                );
-              } else {
-                return RaceHubWithoutEventScreen();
+                return RaceHubScreen(extras['event']);
               }
+              return RaceHubWithoutEventScreen();
             },
           ),
 
-          // videos
+          // ── Videos list ────────────────────────────────────────────────
           GoRoute(
             name: 'videos',
             path: 'videos',
-            builder: (context, state) {
-              return Scaffold(
-                appBar: AppBar(
-                  title: Text(
-                    AppLocalizations.of(context)!.videos,
-                  ),
-                  backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                ),
-                body: VideosScreen(ScrollController()),
-              );
-            },
+            builder: (context, state) => _adaptivePage(
+              context: context,
+              title: AppLocalizations.of(context)!.videos,
+              body: VideosScreen(ScrollController()),
+            ),
           ),
         ],
       ),

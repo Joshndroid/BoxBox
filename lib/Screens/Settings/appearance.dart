@@ -1,6 +1,6 @@
 /*
  *  This file is part of BoxBox (https://github.com/BrightDV/BoxBox).
- * 
+ *
  * BoxBox is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -13,13 +13,15 @@
  *
  * You should have received a copy of the GNU Lesser General Public License
  * along with BoxBox.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Copyright (c) 2022-2025, BrightDV
  */
 
 import 'package:adaptive_theme/adaptive_theme.dart';
+import 'package:boxbox/helpers/platform_adaptive.dart';
 import 'package:boxbox/helpers/team_background_color.dart';
 import 'package:boxbox/l10n/app_localizations.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -32,8 +34,71 @@ class AppearanceSettingsScreen extends StatefulWidget {
 }
 
 class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
+  // ─────────────────────────────────────── helpers ──────────────────────────
+
+  void _showPicker<T>({
+    required BuildContext context,
+    required String title,
+    required List<T> values,
+    required T current,
+    required String Function(T) labelFor,
+    required void Function(T) onSelected,
+  }) {
+    if (isIOS) {
+      showCupertinoModalPopup<void>(
+        context: context,
+        builder: (ctx) => CupertinoActionSheet(
+          title: Text(title),
+          actions: values
+              .map(
+                (v) => CupertinoActionSheetAction(
+                  isDefaultAction: v == current,
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    onSelected(v);
+                  },
+                  child: Text(labelFor(v)),
+                ),
+              )
+              .toList(),
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: false,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(AppLocalizations.of(context)!.close),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet<void>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: values
+                .map(
+                  (v) => ListTile(
+                    title: Text(labelFor(v)),
+                    trailing:
+                        v == current ? const Icon(Icons.check) : null,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      onSelected(v);
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      );
+    }
+  }
+
+  // ─────────────────────────────────────── build ───────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     bool useDarkMode =
         Hive.box('settings').get('darkMode', defaultValue: true) as bool;
     String newsLayout =
@@ -45,312 +110,382 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     String fontUsedInArticles = Hive.box('settings')
         .get('fontUsedInArticles', defaultValue: 'Formula1') as String;
 
-    Map layoutValueToString = {
-      'big': AppLocalizations.of(context)?.articleFull,
-      'medium': AppLocalizations.of(context)?.articleTitleAndImage,
-      'condensed': AppLocalizations.of(context)?.articleTitleAndDescription,
-      'small': AppLocalizations.of(context)?.articleTitle,
+    final Map<String, String?> layoutValueToLabel = {
+      'big': l10n.articleFull,
+      'medium': l10n.articleTitleAndImage,
+      'condensed': l10n.articleTitleAndDescription,
+      'small': l10n.articleTitle,
     };
-    List themeOptions = <String?>[
-      AppLocalizations.of(context)?.followSystem,
-      AppLocalizations.of(context)?.lightMode,
-      AppLocalizations.of(context)?.darkMode,
+    final List<String> themeOptions = [
+      l10n.followSystem,
+      l10n.lightMode,
+      l10n.darkMode,
     ];
-    String newsLayoutFormated = layoutValueToString[newsLayout];
-    List<String?> teamThemeOptions = [
-      AppLocalizations.of(context)?.defaultValue,
-      // TODO: localize
-      'Navy Blue',
-      'Blue Grey',
-      'Alpine',
-      'Aston Martin',
-      'Ferrari',
-      'Haas',
-      'Kick Sauber',
-      'McLaren',
-      'Mercedes',
-      'RB',
-      'Red Bull',
-      'Williams',
-    ];
-
-    Map teamNameToString = {
-      "default": AppLocalizations.of(context)?.defaultValue,
-      // TODO: localize
-      "navyBlue": 'Navy Blue',
-      "blueGrey": 'Blue Grey',
-      "sauber": 'Kick Sauber',
-      "rb": 'RB',
-      "alpine": 'Alpine',
-      "aston_martin": 'Aston Martin',
-      "ferrari": 'Ferrari',
-      "haas": 'Haas',
-      "mclaren": 'McLaren',
-      "mercedes": 'Mercedes',
-      "red_bull": 'Red Bull',
-      "williams": 'Williams',
+    final Map<String, String> teamInternalToLabel = {
+      'default': l10n.defaultValue ?? 'Default',
+      'navyBlue': 'Navy Blue',
+      'blueGrey': 'Blue Grey',
+      'sauber': 'Kick Sauber',
+      'rb': 'RB',
+      'alpine': 'Alpine',
+      'aston_martin': 'Aston Martin',
+      'ferrari': 'Ferrari',
+      'haas': 'Haas',
+      'mclaren': 'McLaren',
+      'mercedes': 'Mercedes',
+      'red_bull': 'Red Bull',
+      'williams': 'Williams',
     };
-
-    teamTheme = teamNameToString[teamTheme];
-
-    Map fontNameToLabel = {
+    final Map<String, String> fontInternalToLabel = {
       'Formula1': 'Formula 1',
       'Titilium': 'Titilium',
-      'Roboto': AppLocalizations.of(context)!.defaultValue,
+      'Roboto': l10n.defaultValue ?? 'Default',
     };
-    fontUsedInArticles = fontNameToLabel[fontUsedInArticles];
 
+    String themeLabel = themeOptions[themeMode];
+    String teamLabel = teamInternalToLabel[teamTheme] ?? teamTheme;
+    String newsLayoutLabel = layoutValueToLabel[newsLayout] ?? newsLayout;
+    String fontLabel = fontInternalToLabel[fontUsedInArticles] ?? fontUsedInArticles;
+
+    // ── iOS layout ──────────────────────────────────────────────────────────
+    if (isIOS) {
+      return CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          middle: Text(
+            l10n.appearance,
+            style: const TextStyle(
+              fontFamily: 'Formula1',
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: ListView(
+            children: [
+              // Theme
+              CupertinoListSection.insetGrouped(
+                header: Text(l10n.theme),
+                children: [
+                  CupertinoListTile.notched(
+                    title: Text(l10n.theme),
+                    trailing: Text(
+                      themeLabel,
+                      style: const TextStyle(
+                          color: CupertinoColors.systemGrey),
+                    ),
+                    onTap: () => _showPicker<int>(
+                      context: context,
+                      title: l10n.theme,
+                      values: [0, 1, 2],
+                      current: themeMode,
+                      labelFor: (v) => themeOptions[v],
+                      onSelected: (newMode) {
+                        setState(() {
+                          themeMode = newMode;
+                          bool newValue;
+                          if (newMode == 0) {
+                            final brightness =
+                                MediaQuery.of(context).platformBrightness;
+                            newValue = brightness == Brightness.dark;
+                            newValue
+                                ? AdaptiveTheme.of(context).setDark()
+                                : AdaptiveTheme.of(context).setLight();
+                          } else if (newMode == 1) {
+                            newValue = false;
+                            AdaptiveTheme.of(context).setLight();
+                          } else {
+                            newValue = true;
+                            AdaptiveTheme.of(context).setDark();
+                          }
+                          Hive.box('settings').put('darkMode', newValue);
+                          Hive.box('settings').put('themeMode', newMode);
+                          useDarkMode = newValue;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              // Team colours
+              CupertinoListSection.insetGrouped(
+                header: Text(l10n.teamColors),
+                footer: Text(l10n.needsRestart),
+                children: [
+                  CupertinoListTile.notched(
+                    title: Text(l10n.teamColors),
+                    trailing: Text(
+                      teamLabel,
+                      style: const TextStyle(
+                          color: CupertinoColors.systemGrey),
+                    ),
+                    onTap: () => _showPicker<String>(
+                      context: context,
+                      title: l10n.teamColors,
+                      values: teamInternalToLabel.keys.toList(),
+                      current: teamTheme,
+                      labelFor: (v) => teamInternalToLabel[v] ?? v,
+                      onSelected: (newInternal) {
+                        setState(() {
+                          teamTheme = newInternal;
+                          Hive.box('settings')
+                              .put('teamTheme', newInternal);
+                          final Color color = TeamBackgroundColor()
+                              .getTeamColor(newInternal);
+                          AdaptiveTheme.of(context).setTheme(
+                            light: ThemeData(
+                              useMaterial3: true,
+                              brightness: Brightness.light,
+                              colorScheme: ColorScheme.fromSeed(
+                                seedColor: color,
+                                brightness: Brightness.light,
+                              ),
+                              fontFamily: 'Formula1',
+                            ),
+                            dark: ThemeData(
+                              useMaterial3: true,
+                              brightness: Brightness.dark,
+                              colorScheme: ColorScheme.fromSeed(
+                                seedColor: color,
+                                brightness: Brightness.dark,
+                              ),
+                              fontFamily: 'Formula1',
+                            ),
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              // News layout
+              CupertinoListSection.insetGrouped(
+                header: Text(l10n.newsLayout),
+                children: [
+                  CupertinoListTile.notched(
+                    title: Text(l10n.newsLayout),
+                    trailing: Text(
+                      newsLayoutLabel,
+                      style: const TextStyle(
+                          color: CupertinoColors.systemGrey),
+                    ),
+                    onTap: () => _showPicker<String>(
+                      context: context,
+                      title: l10n.newsLayout,
+                      values: ['big', 'medium', 'condensed', 'small'],
+                      current: newsLayout,
+                      labelFor: (v) => layoutValueToLabel[v] ?? v,
+                      onSelected: (newLayout) {
+                        setState(() {
+                          newsLayout = newLayout;
+                          Hive.box('settings')
+                              .put('newsLayout', newLayout);
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              // Font
+              CupertinoListSection.insetGrouped(
+                header: Text(l10n.font),
+                footer: Text(l10n.fontDescription),
+                children: [
+                  CupertinoListTile.notched(
+                    title: Text(l10n.font),
+                    trailing: Text(
+                      fontLabel,
+                      style: const TextStyle(
+                          color: CupertinoColors.systemGrey),
+                    ),
+                    onTap: () => _showPicker<String>(
+                      context: context,
+                      title: l10n.font,
+                      values: ['Formula1', 'Titilium', 'Roboto'],
+                      current: fontUsedInArticles,
+                      labelFor: (v) => fontInternalToLabel[v] ?? v,
+                      onSelected: (newFont) {
+                        setState(() {
+                          fontUsedInArticles = newFont;
+                          Hive.box('settings')
+                              .put('fontUsedInArticles', newFont);
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── Android / Web layout ───────────────────────────────────────────────
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          AppLocalizations.of(context)!.appearance,
-        ),
+        title: Text(l10n.appearance),
         backgroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
       body: Column(
         children: [
           ListTile(
-            title: Text(
-              AppLocalizations.of(context)!.theme,
-            ),
+            title: Text(l10n.theme),
             onTap: () {},
-            trailing: DropdownButton(
+            trailing: DropdownButton<int>(
               value: themeMode,
               onChanged: (int? newThemeMode) {
                 if (newThemeMode != null) {
-                  setState(
-                    () {
-                      bool newValue;
-                      setState(() {
-                        if (newThemeMode == 0) {
-                          final Brightness brightnessValue =
-                              MediaQuery.of(context).platformBrightness;
-                          bool isDark = brightnessValue == Brightness.dark;
-                          newValue = isDark;
-                          if (newValue) {
-                            AdaptiveTheme.of(context).setDark();
-                          } else {
-                            AdaptiveTheme.of(context).setLight();
-                          }
-                        } else if (newThemeMode == 1) {
-                          newValue = false;
-                          AdaptiveTheme.of(context).setLight();
-                        } else {
-                          newValue = true;
-                          AdaptiveTheme.of(context).setDark();
-                        }
-                        Hive.box('settings').put('darkMode', newValue);
-                        Hive.box('settings').put('themeMode', newThemeMode);
-
-                        themeMode = newThemeMode;
-                        useDarkMode = newValue;
-                      });
-                    },
-                  );
+                  setState(() {
+                    bool newValue;
+                    if (newThemeMode == 0) {
+                      final Brightness brightnessValue =
+                          MediaQuery.of(context).platformBrightness;
+                      newValue = brightnessValue == Brightness.dark;
+                      newValue
+                          ? AdaptiveTheme.of(context).setDark()
+                          : AdaptiveTheme.of(context).setLight();
+                    } else if (newThemeMode == 1) {
+                      newValue = false;
+                      AdaptiveTheme.of(context).setLight();
+                    } else {
+                      newValue = true;
+                      AdaptiveTheme.of(context).setDark();
+                    }
+                    Hive.box('settings').put('darkMode', newValue);
+                    Hive.box('settings').put('themeMode', newThemeMode);
+                    themeMode = newThemeMode;
+                    useDarkMode = newValue;
+                  });
                 }
               },
-              items: <int>[0, 1, 2].map<DropdownMenuItem<int>>(
-                (int value) {
-                  return DropdownMenuItem<int>(
-                    value: value,
-                    child: Text(
-                      themeOptions[value],
-                      style: TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              items: [0, 1, 2]
+                  .map((v) => DropdownMenuItem<int>(
+                        value: v,
+                        child: Text(themeOptions[v],
+                            style: const TextStyle(fontSize: 12)),
+                      ))
+                  .toList(),
             ),
           ),
           ListTile(
-            title: Text(
-              AppLocalizations.of(context)!.teamColors,
-            ),
-            subtitle: Text(
-              AppLocalizations.of(context)!.needsRestart,
-              style: TextStyle(
-                fontSize: 12,
-              ),
-            ),
+            title: Text(l10n.teamColors),
+            subtitle: Text(l10n.needsRestart,
+                style: const TextStyle(fontSize: 12)),
             onTap: () {},
-            trailing: DropdownButton(
-              value: teamTheme,
-              onChanged: (String? newTeamTheme) {
-                if (newTeamTheme != null) {
-                  setState(
-                    () {
-                      Map stringToValue = {
-                        // TODO: localize
-                        AppLocalizations.of(context)?.defaultValue: 'default',
-                        'Navy Blue': 'navyBlue',
-                        'Blue Grey': 'blueGrey',
-                        'Kick Sauber': 'sauber',
-                        'RB': 'rb',
-                        'Alpine': 'alpine',
-                        'Aston Martin': 'aston_martin',
-                        'Ferrari': 'ferrari',
-                        'Haas': 'haas',
-                        'McLaren': 'mclaren',
-                        'Mercedes': 'mercedes',
-                        'Red Bull': 'red_bull',
-                        'Williams': 'williams',
-                      };
-                      Hive.box('settings').put(
-                        'teamTheme',
-                        stringToValue[newTeamTheme],
-                      );
-                      Color color = TeamBackgroundColor()
-                          .getTeamColor(stringToValue[newTeamTheme]);
-
-                      AdaptiveTheme.of(context).setTheme(
-                        light: ThemeData(
-                          useMaterial3: true,
+            trailing: DropdownButton<String>(
+              value: teamLabel,
+              onChanged: (String? newLabel) {
+                if (newLabel != null) {
+                  final newInternal = teamInternalToLabel.entries
+                      .firstWhere((e) => e.value == newLabel,
+                          orElse: () =>
+                              MapEntry('default', newLabel))
+                      .key;
+                  setState(() {
+                    Hive.box('settings').put('teamTheme', newInternal);
+                    final Color color =
+                        TeamBackgroundColor().getTeamColor(newInternal);
+                    AdaptiveTheme.of(context).setTheme(
+                      light: ThemeData(
+                        useMaterial3: true,
+                        brightness: Brightness.light,
+                        colorScheme: ColorScheme.fromSeed(
+                          seedColor: color,
+                          onPrimary: color,
                           brightness: Brightness.light,
-                          colorScheme: color == Color(0xFF000408) ||
-                                  color == Color(0x00000001)
-                              ? ColorScheme.fromSeed(
-                                  seedColor: color,
-                                  brightness: Brightness.light,
-                                )
-                              : ColorScheme.fromSeed(
-                                  seedColor: color,
-                                  onPrimary: color,
-                                  brightness: Brightness.light,
-                                ),
-                          fontFamily: 'Formula1',
                         ),
-                        dark: ThemeData(
-                          useMaterial3: true,
+                        fontFamily: 'Formula1',
+                      ),
+                      dark: ThemeData(
+                        useMaterial3: true,
+                        brightness: Brightness.dark,
+                        colorScheme: ColorScheme.fromSeed(
+                          seedColor: color,
+                          onPrimary:
+                              HSLColor.fromColor(color)
+                                  .withLightness(0.4)
+                                  .toColor(),
                           brightness: Brightness.dark,
-                          colorScheme: (color == Color(0xFF000408) ||
-                                  color == Color(0x00000001))
-                              ? ColorScheme.fromSeed(
-                                  seedColor: color,
-                                  brightness: Brightness.dark,
-                                )
-                              : ColorScheme.fromSeed(
-                                  seedColor: color,
-                                  onPrimary: HSLColor.fromColor(color)
-                                      .withLightness(0.4)
-                                      .toColor(),
-                                  brightness: Brightness.dark,
-                                ),
-                          fontFamily: 'Formula1',
                         ),
-                      );
-                      teamTheme = newTeamTheme;
-                    },
-                  );
+                        fontFamily: 'Formula1',
+                      ),
+                    );
+                    teamTheme = newInternal;
+                  });
                 }
               },
-              items: teamThemeOptions.map<DropdownMenuItem<String>>(
-                (String? value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(
-                      value!,
-                      style: TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              items: teamInternalToLabel.values
+                  .map((label) => DropdownMenuItem<String>(
+                        value: label,
+                        child: Text(label,
+                            style: const TextStyle(fontSize: 12)),
+                      ))
+                  .toList(),
             ),
           ),
           ListTile(
-            title: Text(
-              AppLocalizations.of(context)!.newsLayout,
-            ),
+            title: Text(l10n.newsLayout),
             onTap: () {},
-            trailing: DropdownButton(
-              value: newsLayoutFormated,
-              onChanged: (newValue) {
-                if (newValue != null) {
-                  setState(
-                    () {
-                      Map stringToValue = {
-                        AppLocalizations.of(context)?.articleFull: 'big',
-                        AppLocalizations.of(context)?.articleTitleAndImage:
-                            'medium',
-                        AppLocalizations.of(context)
-                            ?.articleTitleAndDescription: 'condensed',
-                        AppLocalizations.of(context)?.articleTitle: 'small',
-                      };
-                      newsLayout = stringToValue[newValue];
-                      Hive.box('settings').put('newsLayout', newsLayout);
-                    },
-                  );
+            trailing: DropdownButton<String>(
+              value: newsLayoutLabel,
+              onChanged: (newLabel) {
+                if (newLabel != null) {
+                  final newLayout = layoutValueToLabel.entries
+                      .firstWhere((e) => e.value == newLabel,
+                          orElse: () => MapEntry('big', newLabel))
+                      .key;
+                  setState(() {
+                    newsLayout = newLayout;
+                    Hive.box('settings').put('newsLayout', newsLayout);
+                  });
                 }
               },
-              items: <String>[
-                AppLocalizations.of(context)!.articleFull,
-                AppLocalizations.of(context)!.articleTitleAndImage,
-                AppLocalizations.of(context)!.articleTitleAndDescription,
-                AppLocalizations.of(context)!.articleTitle,
-              ].map<DropdownMenuItem<String>>(
-                (String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: useDarkMode ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              items: layoutValueToLabel.values
+                  .map((v) => DropdownMenuItem<String>(
+                        value: v,
+                        child: Text(
+                          v ?? '',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: useDarkMode
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                        ),
+                      ))
+                  .toList(),
             ),
           ),
           ListTile(
-            title: Text(
-              AppLocalizations.of(context)!.font,
-            ),
-            subtitle: Text(
-              AppLocalizations.of(context)!.fontDescription,
-              style: TextStyle(
-                fontSize: 12,
-              ),
-            ),
-            trailing: DropdownButton(
-              value: fontUsedInArticles,
-              onChanged: (newValue) {
-                if (newValue != null) {
-                  setState(
-                    () {
-                      Map stringToValue = {
-                        'Formula 1': 'Formula1',
-                        'Titilium': 'Titilium',
-                        AppLocalizations.of(context)!.defaultValue: 'Roboto',
-                      };
-                      fontUsedInArticles = stringToValue[newValue];
-                      Hive.box('settings')
-                          .put('fontUsedInArticles', fontUsedInArticles);
-                    },
-                  );
+            title: Text(l10n.font),
+            subtitle: Text(l10n.fontDescription,
+                style: const TextStyle(fontSize: 12)),
+            trailing: DropdownButton<String>(
+              value: fontLabel,
+              onChanged: (newLabel) {
+                if (newLabel != null) {
+                  final newFont = fontInternalToLabel.entries
+                      .firstWhere((e) => e.value == newLabel,
+                          orElse: () => MapEntry('Roboto', newLabel))
+                      .key;
+                  setState(() {
+                    fontUsedInArticles = newFont;
+                    Hive.box('settings')
+                        .put('fontUsedInArticles', fontUsedInArticles);
+                  });
                 }
               },
-              items: <String>[
-                'Formula 1',
-                'Titilium',
-                AppLocalizations.of(context)!.defaultValue,
-              ].map<DropdownMenuItem<String>>(
-                (String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              items: fontInternalToLabel.values
+                  .map((v) => DropdownMenuItem<String>(
+                        value: v,
+                        child: Text(v,
+                            style: const TextStyle(fontSize: 12)),
+                      ))
+                  .toList(),
             ),
           ),
         ],

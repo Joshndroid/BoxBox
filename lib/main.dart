@@ -20,6 +20,7 @@
  */
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:background_downloader/background_downloader.dart';
@@ -30,6 +31,7 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:boxbox/helpers/constants.dart';
 import 'package:boxbox/helpers/route_handler.dart';
 import 'package:boxbox/helpers/team_background_color.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:boxbox/l10n/app_localizations.dart';
@@ -303,40 +305,88 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-    return AdaptiveTheme(
-      light: ThemeData(
+    // Determine if we're running on iOS (native, not web)
+    final bool runningOnIOS = !kIsWeb && Platform.isIOS;
+
+    ThemeData buildTheme({
+      required Brightness brightness,
+      required Color seed,
+    }) {
+      return ThemeData(
         useMaterial3: true,
-        brightness: Brightness.light,
-        colorSchemeSeed: finalColor,
-        fontFamily: 'Formula1',
-      ),
-      dark: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: (finalColor == Color(0xFF000408) ||
-                finalColor == Color(0x00000001))
+        brightness: brightness,
+        // On iOS, tell Material widgets to use iOS-style transitions & behaviour
+        platform: runningOnIOS ? TargetPlatform.iOS : null,
+        colorScheme: brightness == Brightness.light
             ? ColorScheme.fromSeed(
-                seedColor: finalColor,
-                brightness: Brightness.dark,
+                seedColor: seed,
+                onPrimary: seed,
+                brightness: Brightness.light,
               )
-            : ColorScheme.fromSeed(
-                seedColor: finalColor,
-                onPrimary:
-                    HSLColor.fromColor(finalColor).withLightness(0.4).toColor(),
-                brightness: Brightness.dark,
-              ),
+            : (seed == const Color(0xFF000408) ||
+                    seed == const Color(0x00000001))
+                ? ColorScheme.fromSeed(
+                    seedColor: seed,
+                    brightness: Brightness.dark,
+                  )
+                : ColorScheme.fromSeed(
+                    seedColor: seed,
+                    onPrimary:
+                        HSLColor.fromColor(seed).withLightness(0.4).toColor(),
+                    brightness: Brightness.dark,
+                  ),
         fontFamily: 'Formula1',
-      ),
+        // iOS-style page transitions for all routes
+        pageTransitionsTheme: runningOnIOS
+            ? const PageTransitionsTheme(
+                builders: {
+                  TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+                },
+              )
+            : null,
+      );
+    }
+
+    return AdaptiveTheme(
+      light: buildTheme(brightness: Brightness.light, seed: finalColor),
+      dark: buildTheme(brightness: Brightness.dark, seed: finalColor),
       initial: useDarkMode ? AdaptiveThemeMode.dark : AdaptiveThemeMode.light,
-      builder: (theme, darkTheme) => MaterialApp.router(
-        title: 'Box, Box!',
-        theme: theme,
-        darkTheme: darkTheme,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: supportedLocales,
-        debugShowCheckedModeBanner: false,
-        routerConfig: RouterLocalConfig.router,
-      ),
+      builder: (theme, darkTheme) {
+        if (runningOnIOS) {
+          // Wrap MaterialApp in a CupertinoTheme so Cupertino widgets
+          // pick up the app's accent colour automatically.
+          final CupertinoThemeData cupertinoTheme = CupertinoThemeData(
+            brightness: useDarkMode ? Brightness.dark : Brightness.light,
+            primaryColor: theme.colorScheme.primary,
+          );
+          return CupertinoTheme(
+            data: cupertinoTheme,
+            child: MaterialApp.router(
+              title: 'Box, Box!',
+              theme: theme,
+              darkTheme: darkTheme,
+              localizationsDelegates: [
+                ...AppLocalizations.localizationsDelegates,
+                DefaultCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: supportedLocales,
+              debugShowCheckedModeBanner: false,
+              routerConfig: RouterLocalConfig.router,
+            ),
+          );
+        }
+
+        return MaterialApp.router(
+          title: 'Box, Box!',
+          theme: theme,
+          darkTheme: darkTheme,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: supportedLocales,
+          debugShowCheckedModeBanner: false,
+          routerConfig: RouterLocalConfig.router,
+        );
+      },
     );
   }
 }

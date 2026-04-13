@@ -11,9 +11,9 @@
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>formula1</string>
+		<string>Box, Box!</string>
 		<key>CFBundleDisplayName</key>
-		<string>formula1</string>
+		<string>Box, Box!</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -24,16 +24,25 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<key>MinimumOSVersion</key>
+		<string>16.0</string>
+
+		<!-- Launch / UI -->
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>
 		<string>Main</string>
+		<key>UIViewControllerBasedStatusBarAppearance</key>
+		<true/>
+
+		<!-- Supported orientations (iPhone) -->
 		<key>UISupportedInterfaceOrientations</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
+		<!-- Supported orientations (iPad) -->
 		<key>UISupportedInterfaceOrientations~ipad</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
@@ -41,9 +50,77 @@
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
-		<key>UIViewControllerBasedStatusBarAppearance</key>
-		<false/>
-		<key>UIStatusBarHidden</key>
-		<false/>
+
+		<!-- Network -->
+		<key>NSAppTransportSecurity</key>
+		<dict>
+			<key>NSAllowsArbitraryLoads</key>
+			<true/>
+		</dict>
+
+		<!-- Local network (connectivity_plus) -->
+		<key>NSLocalNetworkUsageDescription</key>
+		<string>Box, Box! uses the local network to check connectivity.</string>
+		<key>NSBonjourServices</key>
+		<array>
+			<string>_http._tcp</string>
+		</array>
+
+		<!-- Notifications (awesome_notifications) -->
+		<key>UIUserNotificationSettings</key>
+		<dict/>
+
+		<!-- Background modes (workmanager + background_downloader + awesome_notifications) -->
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>fetch</string>
+			<string>processing</string>
+			<string>remote-notification</string>
+		</array>
+
+		<!-- Background task identifiers (workmanager) -->
+		<key>BGTaskSchedulerPermittedIdentifiers</key>
+		<array>
+			<string>be.tramckrijte.workmanager.iOSBackgroundAppRefresh</string>
+			<string>be.tramckrijte.workmanager.iOSBackgroundProcessingTask</string>
+		</array>
+
+		<!-- Calendar (for race-event scheduling) -->
+		<key>NSCalendarsUsageDescription</key>
+		<string>Box, Box! can add race events to your calendar.</string>
+		<key>NSCalendarsFullAccessUsageDescription</key>
+		<string>Box, Box! can add race events to your calendar.</string>
+
+		<!-- Photos / media sharing -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Box, Box! can save downloaded media to your photo library.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Box, Box! can save downloaded media to your photo library.</string>
+
+		<!-- File sharing (receive_sharing_intent) -->
+		<key>LSSupportsOpeningDocumentsInPlace</key>
+		<true/>
+		<key>UIFileSharingEnabled</key>
+		<true/>
+
+		<!-- Shared URL schemes (receive_sharing_intent + url_launcher) -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>boxbox</string>
+				</array>
+				<key>CFBundleURLName</key>
+				<string>org.brightdv.boxbox</string>
+			</dict>
+		</array>
+
+		<!-- Universal links / deep links -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>https</string>
+			<string>http</string>
+		</array>
 	</dict>
 </plist>

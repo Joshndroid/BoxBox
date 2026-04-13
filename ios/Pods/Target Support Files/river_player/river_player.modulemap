@@ -1,0 +1,6 @@
+framework module river_player {
+  umbrella header "river_player-umbrella.h"
+
+  export *
+  module * { export * }
+}
