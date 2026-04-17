@@ -30,7 +30,7 @@
   },
   "public_header_files": "video_player_avfoundation/Sources/video_player_avfoundation/include/**/*.h",
   "platforms": {
-    "ios": "12.0",
+    "ios": "26.0",
     "osx": "10.14"
   },
   "pod_target_xcconfig": {

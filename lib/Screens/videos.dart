@@ -85,7 +85,6 @@ class _VideosScreenState extends State<VideosScreen> {
               pagingController: _pagingController,
               scrollController: widget._scrollController,
               scrollDirection: Axis.vertical,
-              shrinkWrap: true,
               builderDelegate: PagedChildBuilderDelegate<Video>(
                 itemBuilder: (context, video, index) {
                   if (index < 3 && headerVideos.length < 3) {
@@ -134,7 +133,6 @@ class _VideosScreenState extends State<VideosScreen> {
             pagingController: _pagingController,
             scrollController: widget._scrollController,
             scrollDirection: Axis.vertical,
-            shrinkWrap: true,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: width < 800
                   ? 2
@@ -238,6 +236,10 @@ class VideoItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double width = MediaQuery.of(context).size.width;
+    final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final int imageCacheWidth = (width * devicePixelRatio).round();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 2, 2, 2),
       child: kIsWeb
@@ -260,6 +262,9 @@ class VideoItem extends StatelessWidget {
                         ),
                         child: CachedNetworkImage(
                           imageUrl: videos[index].thumbnailUrl,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          memCacheWidth: imageCacheWidth,
                           placeholder: (context, url) =>
                               const LoadingIndicatorUtil(
                             replaceImage: true,
@@ -270,7 +275,7 @@ class VideoItem extends StatelessWidget {
                           fadeOutDuration: const Duration(milliseconds: 300),
                           fadeInDuration: const Duration(milliseconds: 300),
                           colorBlendMode: BlendMode.darken,
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                         ),
                       ),
                       Padding(
@@ -354,9 +359,11 @@ class VideoItem extends StatelessWidget {
                       ),
                       child: CachedNetworkImage(
                         imageUrl: videos[index].thumbnailUrl,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        memCacheWidth: imageCacheWidth,
                         placeholder: (context, url) => SizedBox(
-                          height:
-                              MediaQuery.of(context).size.width / (16 / 9) - 7,
+                          height: width / (16 / 9) - 7,
                           child: const LoadingIndicatorUtil(
                             replaceImage: true,
                           ),
@@ -367,7 +374,7 @@ class VideoItem extends StatelessWidget {
                         fadeInDuration: const Duration(milliseconds: 300),
                         fadeOutDuration: const Duration(milliseconds: 300),
                         colorBlendMode: BlendMode.darken,
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                       ),
                     ),
                     Padding(

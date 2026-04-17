@@ -43,23 +43,102 @@ import 'package:workmanager/workmanager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const StartupApp());
+}
+
+class StartupApp extends StatelessWidget {
+  const StartupApp({Key? key}) : super(key: key);
+
+  static final Future<void> _startupFuture = _bootstrapApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _startupFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done &&
+            !snapshot.hasError) {
+          return const MyApp();
+        }
+
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            fontFamily: 'Formula1',
+            scaffoldBackgroundColor: const Color(0xFF000408),
+          ),
+          home: const _StartupScreen(),
+        );
+      },
+    );
+  }
+}
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _bootstrapApp() async {
   await Hive.initFlutter();
 
   final settingsBox = await Hive.openBox('settings');
-  final requestsBox = await Hive.openBox('requests');
-  final historyBox = await Hive.openBox('history');
-  final feedsBox = await Hive.openBox('feeds');
-  final compareBox = await Hive.openBox('compare');
-  final downloads = await Hive.openBox('downloads');
+  await Hive.openBox('requests');
+  await Hive.openBox('history');
+  await Hive.openBox('feeds');
+  await Hive.openBox('compare');
+  await Hive.openBox('downloads');
 
-  if (!kIsWeb) {
-    await FileDownloader().trackTasks();
-    await Notifications().initializeNotifications();
+  final String boxboxServerDefaultInstance =
+      Constants().OFFICIAL_BBS_SERVER_URL;
+  final String officialFeed = Constants().F1_API_URL;
+
+  if (settingsBox.get('teamTheme') == 'alfa' ||
+      settingsBox.get('teamTheme') == 'alphatauri') {
+    await settingsBox.put('teamTheme', 'default');
   }
+  if (!settingsBox.containsKey('server')) {
+    await settingsBox.put(
+      'server',
+      kIsWeb ? boxboxServerDefaultInstance : officialFeed,
+    );
+  }
+  if (!settingsBox.containsKey('customServers')) {
+    await settingsBox.put(
+      'customServers',
+      [boxboxServerDefaultInstance],
+    );
+  }
+
+  setTimeagoLocaleMessages();
 
   GoRouter.optionURLReflectsImperativeAPIs = true;
 
-  runApp(const MyApp());
+  if (!kIsWeb) {
+    unawaited(_initializePlatformServices());
+  }
+}
+
+Future<void> _initializePlatformServices() async {
+  try {
+    await FileDownloader().trackTasks();
+    await Notifications().initializeNotifications();
+  } catch (error) {
+    debugPrint('Platform service initialization failed: $error');
+  }
 }
 
 @pragma('vm:entry-point')
@@ -210,7 +289,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late StreamSubscription _intentDataStreamSubscription;
+  StreamSubscription? _intentDataStreamSubscription;
 
   @override
   void initState() {
@@ -251,7 +330,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
-    _intentDataStreamSubscription.cancel();
+    _intentDataStreamSubscription?.cancel();
     super.dispose();
   }
 
@@ -262,17 +341,10 @@ class _MyAppState extends State<MyApp> {
     bool useDarkMode =
         Hive.box('settings').get('darkMode', defaultValue: true) as bool;
 
-    // 2024 team rebrandings
-    if (teamTheme == 'alfa' || teamTheme == 'alphatauri') {
-      Hive.box('settings').put('teamTheme', 'default');
-    }
-
     /*Map<int, Color> color = TeamsThemes().getTeamTheme(teamTheme);
      MaterialColor colorCustom =
         MaterialColor(TeamsThemes().getTeamColor(teamTheme), color); */
     Color finalColor = TeamBackgroundColor().getTeamColor(teamTheme);
-
-    setTimeagoLocaleMessages();
 
     // move english as the first locale
     List<Locale> supportedLocales = List.from(
@@ -280,30 +352,6 @@ class _MyAppState extends State<MyApp> {
     );
     supportedLocales.removeAt(supportedLocales.indexOf(const Locale('en')));
     supportedLocales.insert(0, const Locale('en'));
-
-    final String boxboxServerDefaultInstance =
-        Constants().OFFICIAL_BBS_SERVER_URL;
-    final String officialFeed = Constants().F1_API_URL;
-
-    if (Hive.box('settings').get(
-          'server',
-        ) ==
-        null) {
-      Hive.box('settings').put(
-        'server',
-        kIsWeb ? boxboxServerDefaultInstance : officialFeed,
-      );
-    }
-
-    if (Hive.box('settings').get(
-          'customServers',
-        ) ==
-        null) {
-      Hive.box('settings').put(
-        'customServers',
-        [boxboxServerDefaultInstance],
-      );
-    }
 
     // Determine if we're running on iOS (native, not web)
     final bool runningOnIOS = !kIsWeb && Platform.isIOS;

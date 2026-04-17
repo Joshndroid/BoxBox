@@ -47,23 +47,15 @@ class MainBottomNavigationBar extends StatefulWidget {
 }
 
 class _MainBottomNavigationBarState extends State<MainBottomNavigationBar> {
+  bool _configuredDownloaderNotifications = false;
+
   void _homeSetState() => setState(() {});
 
   @override
-  Widget build(BuildContext context) {
-    // Update dark-mode preference based on system / setting
-    int themeMode =
-        Hive.box('settings').get('themeMode', defaultValue: 0) as int;
-    final Brightness brightness = MediaQuery.of(context).platformBrightness;
-    final bool isDark = brightness == Brightness.dark;
-    themeMode == 0
-        ? Hive.box('settings').put('darkMode', isDark)
-        : themeMode == 1
-            ? Hive.box('settings').put('darkMode', false)
-            : Hive.box('settings').put('darkMode', true);
-
-    // Configure file-downloader notifications
-    if (!kIsWeb) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!kIsWeb && !_configuredDownloaderNotifications) {
+      _configuredDownloaderNotifications = true;
       FileDownloader().configureNotification(
         running: TaskNotification(
           AppLocalizations.of(context)!.downloadRunning,
@@ -83,6 +75,24 @@ class _MainBottomNavigationBarState extends State<MainBottomNavigationBar> {
         ),
         progressBar: true,
       );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Update dark-mode preference based on system / setting
+    final settings = Hive.box('settings');
+    int themeMode =
+        Hive.box('settings').get('themeMode', defaultValue: 0) as int;
+    final Brightness brightness = MediaQuery.of(context).platformBrightness;
+    final bool isDark = brightness == Brightness.dark;
+    final bool darkMode = themeMode == 0
+        ? isDark
+        : themeMode == 1
+            ? false
+            : true;
+    if (settings.get('darkMode') != darkMode) {
+      settings.put('darkMode', darkMode);
     }
 
     if (isIOS) {
@@ -107,17 +117,75 @@ class _AndroidNavShell extends StatefulWidget {
 class _AndroidNavShellState extends State<_AndroidNavShell> {
   int _selectedIndex = 0;
   List<Widget> actions = [];
-  final ScrollController scrollController = ScrollController();
+  String? _championship;
+  late List<ScrollController> _scrollControllers;
+  late List<Widget> _screens;
 
   void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 
   @override
+  void initState() {
+    super.initState();
+    _syncScreens();
+  }
+
+  void _syncScreens() {
+    final championship = Hive.box('settings')
+        .get('championship', defaultValue: 'Formula 1') as String;
+    if (_championship == championship) {
+      return;
+    }
+
+    if (_championship != null) {
+      for (final controller in _scrollControllers) {
+        controller.dispose();
+      }
+    }
+    _championship = championship;
+    _scrollControllers = [
+      for (int i = 0; i < _tabCountForChampionship(championship); i++)
+        ScrollController(),
+    ];
+    _screens = _buildScreens(championship);
+    if (_selectedIndex >= _screens.length) {
+      _selectedIndex = _screens.length - 1;
+    }
+  }
+
+  int _tabCountForChampionship(String championship) {
+    return championship == 'Formula 1' || championship == 'Formula E' ? 4 : 3;
+  }
+
+  List<Widget> _buildScreens(String championship) {
+    if (championship == 'Formula 1' || championship == 'Formula E') {
+      return [
+        HomeScreen(_scrollControllers[0]),
+        VideosScreen(_scrollControllers[1]),
+        StandingsScreen(scrollController: _scrollControllers[2]),
+        ScheduleScreen(scrollController: _scrollControllers[3]),
+      ];
+    }
+
+    return [
+      HomeScreen(_scrollControllers[0]),
+      StandingsScreen(scrollController: _scrollControllers[1]),
+      ScheduleScreen(scrollController: _scrollControllers[2]),
+    ];
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final List<Widget> screens =
-        UIProvider().getBottomNavigationBarScreens(scrollController);
-    final List<Widget> appBarActions = _selectedIndex == 0
-        ? UIProvider().getNewsAppBarActions(context)
-        : [];
+    _syncScreens();
+    final List<Widget> appBarActions =
+        _selectedIndex == 0 ? UIProvider().getNewsAppBarActions(context) : [];
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +205,10 @@ class _AndroidNavShellState extends State<_AndroidNavShell> {
         destinations: UIProvider().getBottomNavigationBarButtons(context),
         onDestinationSelected: _onItemTapped,
       ),
-      body: screens.elementAt(_selectedIndex),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
     );
   }
 }
@@ -155,7 +226,13 @@ class _IosTabShell extends StatefulWidget {
 }
 
 class _IosTabShellState extends State<_IosTabShell> {
-  final ScrollController _scrollController = ScrollController();
+  final List<ScrollController> _scrollControllers = [
+    ScrollController(),
+    ScrollController(),
+    ScrollController(),
+    ScrollController(),
+    ScrollController(),
+  ];
 
   String get _championship =>
       Hive.box('settings').get('championship', defaultValue: 'Formula 1')
@@ -268,7 +345,7 @@ class _IosTabShellState extends State<_IosTabShell> {
       ),
       child: SafeArea(
         bottom: false,
-        child: HomeScreen(_scrollController),
+        child: HomeScreen(_scrollControllers[0]),
       ),
     );
   }
@@ -286,7 +363,7 @@ class _IosTabShellState extends State<_IosTabShell> {
       ),
       child: SafeArea(
         bottom: false,
-        child: VideosScreen(_scrollController),
+        child: VideosScreen(_scrollControllers[1]),
       ),
     );
   }
@@ -304,7 +381,7 @@ class _IosTabShellState extends State<_IosTabShell> {
       ),
       child: SafeArea(
         bottom: false,
-        child: StandingsScreen(scrollController: _scrollController),
+        child: StandingsScreen(scrollController: _scrollControllers[2]),
       ),
     );
   }
@@ -322,7 +399,7 @@ class _IosTabShellState extends State<_IosTabShell> {
       ),
       child: SafeArea(
         bottom: false,
-        child: ScheduleScreen(scrollController: _scrollController),
+        child: ScheduleScreen(scrollController: _scrollControllers[3]),
       ),
     );
   }
@@ -335,8 +412,16 @@ class _IosTabShellState extends State<_IosTabShell> {
 
   void _showNewsFilterSheet(BuildContext context, AppLocalizations l10n) {
     final List<String> filterItems = [
-      'Feature', 'Image Gallery', 'Interview', 'News',
-      'Opinion', 'Podcast', 'Poll', 'Report', 'Technical', 'Video',
+      'Feature',
+      'Image Gallery',
+      'Interview',
+      'News',
+      'Opinion',
+      'Podcast',
+      'Poll',
+      'Report',
+      'Technical',
+      'Video',
     ];
 
     showCupertinoModalPopup<void>(
@@ -378,6 +463,14 @@ class _IosTabShellState extends State<_IosTabShell> {
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

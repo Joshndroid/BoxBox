@@ -19,7 +19,7 @@
     "Flutter": []
   },
   "platforms": {
-    "ios": "9.0"
+    "ios": "26.0"
   },
   "resource_bundles": {
     "flutter_native_splash_privacy": [

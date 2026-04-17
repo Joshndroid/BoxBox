@@ -1,8 +1,12 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '16.0'
+IOS_DEPLOYMENT_TARGET = '26.0'
+platform :ios, IOS_DEPLOYMENT_TARGET
+inhibit_all_warnings!
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+require 'json'
 
 project 'Runner', {
   'Debug' => :debug,
@@ -48,13 +52,78 @@ def append_build_setting(settings, key, values)
   end
 end
 
+def patch_file(path, description)
+  unless File.exist?(path)
+    puts "Skipped #{description}; file not found: #{path}"
+    return
+  end
+
+  content = File.read(path)
+  patched = yield(content)
+  if patched == content
+    puts "#{description} already up to date"
+    return
+  end
+
+  File.write(path, patched)
+  puts "Patched #{description}"
+end
+
+def force_ios_deployment_target_in_podspec_json(path)
+  return unless File.exist?(path)
+
+  spec = JSON.parse(File.read(path))
+
+  update_ios_target = lambda do |node|
+    changed = false
+
+    if node.is_a?(Hash)
+      if node.dig('platforms', 'ios') && node['platforms']['ios'] != IOS_DEPLOYMENT_TARGET
+        node['platforms']['ios'] = IOS_DEPLOYMENT_TARGET
+        changed = true
+      end
+
+      deployment_targets = node['deployment_target']
+      if deployment_targets.is_a?(Hash) && deployment_targets['ios'] && deployment_targets['ios'] != IOS_DEPLOYMENT_TARGET
+        deployment_targets['ios'] = IOS_DEPLOYMENT_TARGET
+        changed = true
+      end
+
+      node.each_value do |value|
+        changed = update_ios_target.call(value) || changed
+      end
+    elsif node.is_a?(Array)
+      node.each do |value|
+        changed = update_ios_target.call(value) || changed
+      end
+    end
+
+    changed
+  end
+
+  changed = update_ios_target.call(spec)
+
+  File.write(path, JSON.pretty_generate(spec) + "\n") if changed
+end
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = IOS_DEPLOYMENT_TARGET
       config.build_settings['SWIFT_VERSION'] = '5.0'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
+      config.build_settings['SWIFT_ENABLE_LIBRARY_EVOLUTION'] = 'NO'
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+
+      # Some generated pod targets have MODULEMAP_FILE set without explicitly
+      # defining a module, which Xcode 16+ reports as a project warning.
+      config.build_settings['DEFINES_MODULE'] = 'YES' if config.build_settings['MODULEMAP_FILE']
 
       # Fix: ensure every pod can find Flutter/Flutter.h
       framework_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS']
@@ -70,8 +139,6 @@ post_install do |installer|
 
       # Fix: disable warnings-as-errors for river_player pod target
       if target.name == 'river_player'
-        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-        config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         append_build_setting(config.build_settings, 'OTHER_CFLAGS', [
           '-Wno-missing-selector-name',
           '-Wno-incomplete-implementation'
@@ -88,8 +155,10 @@ post_install do |installer|
       next unless target.name == 'Runner'
 
       target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-        config.build_settings['ENABLE_BITCODE'] = 'NO'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = IOS_DEPLOYMENT_TARGET
+        config.build_settings.delete('ENABLE_BITCODE')
+        config.build_settings.delete('BUILD_LIBRARY_FOR_DISTRIBUTION')
+        config.build_settings.delete('SWIFT_ENABLE_LIBRARY_EVOLUTION')
         config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         append_build_setting(config.build_settings, 'OTHER_CFLAGS', [
@@ -97,8 +166,116 @@ post_install do |installer|
           '-Wno-incomplete-implementation'
         ])
       end
+
+      target.shell_script_build_phases.each do |phase|
+        next unless ['Run Script', 'Thin Binary'].include?(phase.name)
+
+        if phase.respond_to?(:always_out_of_date=)
+          phase.always_out_of_date = '1'
+        else
+          phase.instance_variable_get(:@attributes)['alwaysOutOfDate'] = '1'
+        end
+
+        if phase.name == 'Thin Binary'
+          phase.shell_script = '/bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" embed_and_thin'
+        end
+      end
     end
 
     project.save
+  end
+
+  runner_project_path = File.join(__dir__, 'Runner.xcodeproj/project.pbxproj')
+  runner_project = File.read(runner_project_path)
+    .gsub(/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/, "IPHONEOS_DEPLOYMENT_TARGET = #{IOS_DEPLOYMENT_TARGET};")
+
+  runner_project = runner_project.gsub(/(\/\* (?:Run Script|Thin Binary) \*\/ = \{\n\s+isa = PBXShellScriptBuildPhase;\n)(?!\s+alwaysOutOfDate = 1;)/) do
+    "#{$1}\t\t\talwaysOutOfDate = 1;\n"
+  end
+
+  runner_project = runner_project.gsub(
+    '/bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" thin',
+    '/bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" embed_and_thin'
+  )
+
+  File.write(runner_project_path, runner_project)
+
+  Dir.glob(File.join(__dir__, 'Pods/Target Support Files/Pods-Runner/Pods-Runner.*.xcconfig')).each do |path|
+    xcconfig = File.read(path)
+      .gsub('BUILD_LIBRARY_FOR_DISTRIBUTION = YES', 'BUILD_LIBRARY_FOR_DISTRIBUTION = NO')
+    File.write(path, xcconfig)
+  end
+
+  patch_file(
+    File.join(__dir__, 'Flutter/Flutter.podspec'),
+    'Flutter.podspec iOS deployment target'
+  ) do |content|
+    content.gsub(/s\.ios\.deployment_target = '[0-9.]+'/, "s.ios.deployment_target = '#{IOS_DEPLOYMENT_TARGET}'")
+  end
+
+  Dir.glob(File.join(__dir__, 'Pods/Local Podspecs/*.podspec.json')).each do |path|
+    force_ios_deployment_target_in_podspec_json(path)
+  end
+
+  pub_cache = File.expand_path('~/.pub-cache/hosted/pub.dev')
+
+  patch_file(
+    File.join(pub_cache, 'river_player-0.1.4/ios/Classes/BetterPlayer.h'),
+    'BetterPlayer.h for Xcode 16 compatibility'
+  ) do |content|
+    body = content.dup
+    loop do
+      previous = body
+      body = body.sub(/\A\/\/ BoxBox Xcode 16 warning compatibility patch\n#pragma clang diagnostic push\n#pragma clang diagnostic ignored "-Wmissing-selector-name"\n#pragma clang diagnostic ignored "-Wincomplete-implementation"\n\n/, '')
+      body = body.sub(/\A#pragma clang diagnostic push\n#pragma clang diagnostic ignored "-Wmissing-selector-name"\n#pragma clang diagnostic ignored "-Wincomplete-implementation"\n/, '')
+      body = body.sub(/\n#pragma clang diagnostic pop\s*\z/, "\n")
+      break if body == previous
+    end
+
+    <<~HEADER + body.rstrip + <<~FOOTER
+      // BoxBox Xcode 16 warning compatibility patch
+      #pragma clang diagnostic push
+      #pragma clang diagnostic ignored "-Wmissing-selector-name"
+      #pragma clang diagnostic ignored "-Wincomplete-implementation"
+
+    HEADER
+
+      #pragma clang diagnostic pop
+    FOOTER
+  end
+
+  patch_file(
+    File.join(pub_cache, 'url_launcher_ios-6.3.2/ios/url_launcher_ios/Sources/url_launcher_ios/URLLauncherPlugin.swift'),
+    'URLLauncherPlugin.swift to avoid deprecated keyWindow'
+  ) do |content|
+    scene_aware_top_controller = [
+      '    // BoxBox scene-aware key window patch',
+      '    UIApplication.shared.connectedScenes',
+      '      .compactMap { $0 as? UIWindowScene }',
+      '      .flatMap { $0.windows }',
+      '      .first { $0.isKeyWindow }?',
+      '      .rootViewController?',
+      '      .topViewController',
+    ].join("\n")
+
+    content
+      .sub(
+        /    \/\/ TODO\(stuartmorgan\) Provide a non-deprecated codepath\. See\n    \/\/ https:\/\/github\.com\/flutter\/flutter\/issues\/104117\n    UIApplication\.shared\.keyWindow\?\.rootViewController\?\.topViewController/,
+        scene_aware_top_controller
+      )
+      .sub(
+        /\s*\/\/ BoxBox scene-aware key window patch\n\s*UIApplication\.shared\.connectedScenes\n\s*\.compactMap \{ \$0 as\? UIWindowScene \}\n\s*\.flatMap \{ \$0\.windows \}\n\s*\.first \{ \$0\.isKeyWindow \}\?\n\s*\.rootViewController\?\n\s*\.topViewController/,
+        "\n" + scene_aware_top_controller
+      )
+  end
+
+  patch_file(
+    File.join(pub_cache, 'flutter_inappwebview_ios-1.1.2/ios/Storyboards/WebView.storyboard'),
+    'flutter_inappwebview_ios WebView.storyboard deployment target'
+  ) do |content|
+    content.sub(
+      '<deployment version="2048" identifier="iOS"/>',
+      '<deployment version="6656" identifier="iOS"/>'
+    )
   end
 end
