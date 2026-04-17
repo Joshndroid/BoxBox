@@ -35,6 +35,23 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # Patch BetterPlayer.h in the pub cache to suppress Xcode 16 selector-naming warnings.
+  # The header is processed in the Runner target's context so pod-level OTHER_CFLAGS alone
+  # isn't enough — wrapping the file in a diagnostic push/pop is the definitive fix.
+  better_player_header = File.expand_path('~/.pub-cache/hosted/pub.dev/river_player-0.1.4/ios/Classes/BetterPlayer.h')
+  if File.exist?(better_player_header)
+    content = File.read(better_player_header)
+    unless content.include?('Wmissing-selector-name')
+      patched = "#pragma clang diagnostic push\n" \
+                "#pragma clang diagnostic ignored \"-Wmissing-selector-name\"\n" \
+                "#pragma clang diagnostic ignored \"-Wincomplete-implementation\"\n" \
+                + content + \
+                "\n#pragma clang diagnostic pop\n"
+      File.write(better_player_header, patched)
+      puts "✓ Patched BetterPlayer.h for Xcode 16 compatibility"
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
@@ -54,11 +71,21 @@ post_install do |installer|
         config.build_settings['FRAMEWORK_SEARCH_PATHS'] = ["$(inherited)", flutter_path, built_path]
       end
 
-      # Fix: river_player uses C-style ObjC selector naming that Xcode 15+ treats as an error
+      # Fix: disable warnings-as-errors for river_player pod target
       if target.name == 'river_player'
         config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-        config.build_settings['OTHER_CFLAGS'] = '$(inherited) -Wno-strict-selector-match -Wno-deprecated-declarations -Wno-incompatible-pointer-types'
+        config.build_settings['OTHER_CFLAGS'] = '$(inherited) -w'
+        config.build_settings['WARNING_CFLAGS'] = ''
+      end
+
+      # Fix: BetterPlayer.h is also processed in the Runner target context, so suppress
+      # the -Wmissing-selector-name warning there too.
+      if target.name == 'Runner'
+        existing = config.build_settings['OTHER_CFLAGS'] || '$(inherited)'
+        unless existing.include?('-Wno-missing-selector-name')
+          config.build_settings['OTHER_CFLAGS'] = "#{existing} -Wno-missing-selector-name"
+        end
       end
     end
   end
